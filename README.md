@@ -12,7 +12,7 @@ Sekali klik **Generate** di Odoo, sistem akan:
 ## Struktur
 
 ```
-english_section/
+.
 ├── __manifest__.py
 ├── models/
 │   ├── listening_test.py       # english.listening.test: state, skrip, audio, video, tombol Generate
@@ -35,7 +35,11 @@ english_section/
 
 ## Instalasi
 
-1. Letakkan folder `english_section` di salah satu `addons_path`.
+1. Clone repo ini ke folder bernama `english_section` di salah satu `addons_path`:
+
+   ```
+   git clone https://github.com/LukmanZak/ToeflRepo.git english_section
+   ```
 2. Pasang API key Gemini (lihat bagian berikut).
 3. Install modul lewat Apps, atau dari command line:
 
