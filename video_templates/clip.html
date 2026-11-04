@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+    .content { display: flex; flex-direction: column; justify-content: center; }
+    .label { font-size: 44px; font-weight: 600; color: var(--accent); animation: slideIn 0.8s cubic-bezier(.2,.8,.2,1) 0.1s; }
+    h1 { font-size: 100px; font-weight: 800; line-height: 1.15; margin: 20px 0 44px; max-width: 1500px; animation: slideIn 0.9s cubic-bezier(.2,.8,.2,1) 0.35s; }
+    .listen { display: flex; align-items: center; gap: 44px; animation: fadeUp 0.8s 0.9s; }
+
+    /* Equalizer. Every period divides 2 s, so the renderer can loop a 2 s capture without a jump. */
+    .eq { display: flex; align-items: flex-end; gap: 12px; height: 130px; }
+    .eq span { width: 20px; height: 130px; border-radius: 10px; background: var(--accent); transform-origin: bottom; }
+    .eq span:nth-child(odd)  { animation: eq 0.5s ease-in-out infinite alternate; }
+    .eq span:nth-child(3n)   { animation: eq 1s ease-in-out infinite alternate; }
+    .eq span:nth-child(4n+2) { animation: eq 0.25s ease-in-out infinite alternate; }
+    @keyframes eq { from { transform: scaleY(0.18); } to { transform: scaleY(1); } }
+
+    .listen .text { font-size: 46px; font-weight: 600; }
+    .listen .sub { font-size: 34px; color: var(--muted); font-weight: 400; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="slide"><div class="content">
+    <div class="label">Recording {{ number }} of {{ total }}</div>
+    <h1>{{ clip_title }}</h1>
+    <div class="listen">
+        <div class="eq"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <div>
+            <div class="text">Listen to the recording.</div>
+            <div class="sub">{{ question_count }} question{{ '' if question_count == 1 else 's' }} follow after the audio ends.</div>
+        </div>
+    </div>
+</div></div>
+<script src="base.js"></script>
+</body>
+</html>

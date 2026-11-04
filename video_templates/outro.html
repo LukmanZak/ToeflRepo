@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+    .content { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+    h1 { font-size: 98px; font-weight: 800; animation: zoomIn 0.9s cubic-bezier(.2,.8,.2,1) 0.1s; }
+    .line { font-size: 46px; color: var(--muted); margin-top: 24px; animation: fadeUp 0.8s 0.8s; }
+    .cta { margin-top: 64px; padding: 24px 70px; border-radius: 20px; background: var(--bad); font-size: 52px; font-weight: 800; letter-spacing: 1px;
+           animation: pop 0.7s cubic-bezier(.3,1.6,.5,1) 1.4s, beat 0.5s ease-in-out 2.1s infinite alternate; }
+    .small { margin-top: 40px; font-size: 36px; color: var(--muted); animation: fadeUp 0.8s 1.9s; }
+    @keyframes beat { from { transform: scale(1); } to { transform: scale(1.07); } }
+</style>
+</head>
+<body>
+<div class="slide"><div class="content">
+    <!-- Edit the closing words here. -->
+    <h1>Great job! <span class="accent">Keep practicing.</span></h1>
+    <div class="line">Check your answers and replay any recording you missed.</div>
+    <div class="cta">LIKE &amp; SUBSCRIBE</div>
+    <div class="small">Tell us your score in the comments!</div>
+</div></div>
+<script src="base.js"></script>
+</body>
+</html>

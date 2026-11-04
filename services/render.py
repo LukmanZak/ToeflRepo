@@ -1,44 +1,45 @@
-"""Render the listening test as an MP4: audio plus question slides and an answer key at the end.
+"""Render the listening test as an MP4 from the HTML templates in video_templates/.
+
+Each slide is rendered with Jinja2 into a work folder, then services/capture.py turns it into a
+short MP4 segment with headless Chromium + ffmpeg (one subprocess per segment, a few at a time).
+The segments are joined without re-encoding.
 
 Timeline:
-  1. Intro slide, shown for the whole audio length (+1 s)
-  2. One slide per question, shown for `seconds_per_question`
-  3. Answer key slide, shown for `answer_seconds`
+  1. Intro card
+  2. For every recording: title slide with the audio (audio length + 1 s), then for every question:
+     the question with its countdown, and right after it the answer with an explanation
+  3. Answer key, then the outro
+
+To change how a slide looks or what it says, edit the HTML in video_templates/.
 """
+import json
 import shutil
 import subprocess
-import textwrap
+import sys
 import wave
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-WIDTH, HEIGHT = 1280, 720
-BG = (16, 42, 67)
-FG = (255, 255, 255)
-ACCENT = (255, 193, 7)
-MUTED = (190, 210, 230)
-MARGIN = 90
+TEMPLATE_DIR = Path(__file__).resolve().parents[1] / 'video_templates'
+CAPTURE_SCRIPT = Path(__file__).with_name('capture.py')
 
-REGULAR_FONTS = [
-    'C:/Windows/Fonts/arial.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-]
-BOLD_FONTS = [
-    'C:/Windows/Fonts/arialbd.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-]
+WIDTH, HEIGHT = 1920, 1080
+THUMBNAIL_SIZE = (1280, 720)
+
+MIN_SECONDS_PER_QUESTION = 5
+MAX_SECONDS_PER_QUESTION = 120
+QUESTION_LEAD_SECONDS = 2.2   # the options slide in first; the countdown starts after this
+INTRO_SECONDS = 5.0
+OUTRO_SECONDS = 6.0
+ANSWER_KEY_SECONDS = 20.0
+MAX_WORKERS = 3               # Chromium instances running at the same time
+SEGMENT_TIMEOUT = 900
 
 
 class RenderError(Exception):
     pass
-
-
-def _font(candidates, size):
-    for path in candidates:
-        if Path(path).is_file():
-            return ImageFont.truetype(path, size)
-    return ImageFont.load_default(size=size)
 
 
 def wav_duration(path):
@@ -46,100 +47,156 @@ def wav_duration(path):
         return w.getnframes() / float(w.getframerate())
 
 
-def _new_slide():
-    img = Image.new('RGB', (WIDTH, HEIGHT), BG)
-    return img, ImageDraw.Draw(img)
+def explanation_seconds(text):
+    """Reading time for the explanation slide, from its length."""
+    return min(20.0, max(8.0, len((text or '').split()) / 2.8 + 3))
 
 
-def _intro_slide(title):
-    img, draw = _new_slide()
-    title_font = _font(BOLD_FONTS, 64)
-    sub_font = _font(REGULAR_FONTS, 36)
-    lines = textwrap.wrap(title or 'Listening Section', width=32)
-    y = 230
-    for line in lines:
-        draw.text((MARGIN, y), line, font=title_font, fill=FG)
-        y += 80
-    draw.text((MARGIN, y + 30), 'Listen to the recording.', font=sub_font, fill=ACCENT)
-    draw.text((MARGIN, y + 80), 'Questions appear after the audio ends.', font=sub_font, fill=MUTED)
-    return img
+def _environment():
+    return Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)),
+                       autoescape=select_autoescape(['html']), trim_blocks=True, lstrip_blocks=True)
 
 
-def _question_slide(index, total, question, options):
-    img, draw = _new_slide()
-    label_font = _font(BOLD_FONTS, 34)
-    q_font = _font(REGULAR_FONTS, 38)
-    opt_font = _font(REGULAR_FONTS, 32)
-    draw.text((MARGIN, 50), 'Question %d of %d' % (index, total), font=label_font, fill=ACCENT)
-    y = 130
-    for line in textwrap.wrap(question, width=58):
-        draw.text((MARGIN, y), line, font=q_font, fill=FG)
-        y += 52
-    y += 40
-    for letter in 'ABCD':
-        for i, line in enumerate(textwrap.wrap(options[letter], width=70)):
-            prefix = '%s.  ' % letter if i == 0 else '     '
-            draw.text((MARGIN, y), prefix + line, font=opt_font, fill=FG)
-            y += 46
-        y += 14
-    return img
+def _prepare_workdir(workdir):
+    """Copy css/js/fonts next to the rendered slides so their relative links work."""
+    workdir = Path(workdir)
+    for source in TEMPLATE_DIR.rglob('*'):
+        if source.is_file() and source.suffix != '.html' and source.name != 'OFL.txt':
+            target = workdir / source.relative_to(TEMPLATE_DIR)
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
 
 
-def _answer_slide(questions):
-    img, draw = _new_slide()
-    title_font = _font(BOLD_FONTS, 48)
-    font = _font(REGULAR_FONTS, 32)
-    draw.text((MARGIN, 40), 'Answer Key', font=title_font, fill=ACCENT)
-    per_column = (len(questions) + 1) // 2
-    for i, q in enumerate(questions):
-        column = i // per_column
-        row = i % per_column
-        x = MARGIN + column * 560
-        y = 140 + row * 44
-        draw.text((x, y), '%d.' % (i + 1), font=font, fill=FG)
-        draw.text((x + 110, y), q['answer'], font=font, fill=ACCENT)
-    return img
+def _write_slide(workdir, name, template, context):
+    path = Path(workdir) / ('%s.html' % name)
+    path.write_text(_environment().get_template(template).render(**context), encoding='utf-8')
+    return path
 
 
-def _run(cmd, cwd):
-    proc = subprocess.run(cmd, cwd=str(cwd), capture_output=True, timeout=900)
-    if proc.returncode != 0:
-        raise RenderError('ffmpeg failed: %s' % proc.stderr[-800:].decode('utf-8', 'replace'))
-
-
-def render_video(workdir, title, audio_path, questions, seconds_per_question=15, answer_seconds=20):
-    """Build the MP4 in `workdir` and return its bytes."""
+def _ffmpeg():
     ffmpeg = shutil.which('ffmpeg')
     if not ffmpeg:
         raise RenderError('ffmpeg was not found on PATH.')
-    workdir = Path(workdir)
-    audio_path = Path(audio_path)
-    audio_len = wav_duration(audio_path)
-    total_q = len(questions)
+    return ffmpeg
 
-    slides = []  # (image, seconds)
-    slides.append((_intro_slide(title), audio_len + 1.0))
-    for i, q in enumerate(questions, 1):
-        slides.append((_question_slide(i, total_q, q['question'], q['options']), seconds_per_question))
-    slides.append((_answer_slide(questions), answer_seconds))
 
+def _run_capture(spec_path):
+    proc = subprocess.run([sys.executable, '-I', str(CAPTURE_SCRIPT), str(spec_path)],
+                          capture_output=True, timeout=SEGMENT_TIMEOUT)
+    if proc.returncode != 0:
+        raise RenderError('Slide render failed (%s): %s' % (
+            Path(spec_path).stem, proc.stderr[-800:].decode('utf-8', 'replace')))
+
+
+def _write_spec(workdir, name, slide_html, **spec):
+    spec.update({
+        'html': str(slide_html),
+        'out': str(Path(workdir) / ('%s.mp4' % name)),
+        'width': WIDTH,
+        'height': HEIGHT,
+        'ffmpeg': _ffmpeg(),
+    })
+    spec_path = Path(workdir) / ('%s.json' % name)
+    spec_path.write_text(json.dumps(spec), encoding='utf-8')
+    return spec_path, spec['out']
+
+
+def _build_segments(workdir, title, theme, clips, seconds_per_question):
+    """Render every slide to HTML and return [(spec path, segment path)] in video order."""
+    total_q = sum(len(c['questions']) for c in clips)
     segments = []
-    for i, (img, seconds) in enumerate(slides):
-        png = workdir / ('slide%02d.png' % i)
-        seg = 'seg%02d.mp4' % i
-        img.save(png)
-        _run([ffmpeg, '-y', '-loop', '1', '-i', png.name, '-t', '%.2f' % seconds,
-              '-r', '2', '-c:v', 'libx264', '-tune', 'stillimage', '-preset', 'veryfast',
-              '-pix_fmt', 'yuv420p', seg], workdir)
-        segments.append(seg)
 
-    (workdir / 'segments.txt').write_text(''.join("file '%s'\n" % s for s in segments), encoding='utf-8')
-    _run([ffmpeg, '-y', '-f', 'concat', '-safe', '0', '-i', 'segments.txt', '-c', 'copy', 'video.mp4'], workdir)
+    def add(name, template, context, **spec):
+        slide = _write_slide(workdir, name, template, context)
+        segments.append(_write_spec(workdir, name, slide, **spec))
 
-    total = sum(seconds for _, seconds in slides)
-    _run([ffmpeg, '-y', '-i', 'video.mp4', '-i', audio_path.name,
-          '-filter_complex', '[1:a]apad[a]', '-map', '0:v', '-map', '[a]',
-          '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k', '-t', '%.2f' % total,
-          # Move the index (moov atom) to the front so browsers can show duration and seek.
-          '-movflags', '+faststart', 'final.mp4'], workdir)
+    add('s000_intro', 'intro.html',
+        {'title': title or 'Listening Section', 'theme': theme, 'question_count': total_q,
+         'clip_count': len(clips)},
+        fps=24, duration=INTRO_SECONDS, play_until=4.0, loop_seconds=0, audio=None)
+
+    number = 0
+    answers = []
+    lead = QUESTION_LEAD_SECONDS
+    for clip_number, clip in enumerate(clips, 1):
+        audio = Path(clip['audio_path'])
+        add('s%03d_clip' % (len(segments)), 'clip.html',
+            {'number': clip_number, 'total': len(clips), 'clip_title': clip['title'],
+             'question_count': len(clip['questions'])},
+            fps=12, duration=wav_duration(audio) + 1.0, play_until=1.5, loop_seconds=2.0,
+            audio=str(audio))
+        for q in clip['questions']:
+            number += 1
+            answers.append({'number': number, 'letter': q['answer']})
+            add('s%03d_question' % len(segments), 'question.html',
+                {'number': number, 'total': total_q, 'clip_number': clip_number,
+                 'clip_total': len(clips), 'question': q['question'], 'options': q['options'],
+                 'seconds': seconds_per_question, 'lead': lead},
+                fps=12, duration=lead + seconds_per_question,
+                play_until=lead + seconds_per_question, loop_seconds=0, audio=None)
+            add('s%03d_explanation' % len(segments), 'explanation.html',
+                {'number': number, 'total': total_q, 'question': q['question'],
+                 'options': q['options'], 'answer': q['answer'],
+                 'explanation': q.get('explanation', '')},
+                fps=15, duration=explanation_seconds(q.get('explanation')), play_until=3.0,
+                loop_seconds=0, audio=None)
+
+    add('s%03d_answers' % len(segments), 'answer_key.html', {'answers': answers},
+        fps=15, duration=ANSWER_KEY_SECONDS, play_until=0.7 + 0.08 * len(answers) + 0.6,
+        loop_seconds=0, audio=None)
+    add('s%03d_outro' % len(segments), 'outro.html', {},
+        fps=15, duration=OUTRO_SECONDS, play_until=2.5, loop_seconds=1.0, audio=None)
+    return segments
+
+
+def render_video(workdir, title, theme, clips, seconds_per_question=25, on_progress=None):
+    """Build the MP4 in `workdir` and return its bytes.
+
+    `clips` is a list of {'title', 'audio_path', 'questions': [{'question', 'options', 'answer',
+    'explanation'}]}. `on_progress(done, total)` is called from the calling thread.
+    """
+    workdir = Path(workdir)
+    _prepare_workdir(workdir)
+    segments = _build_segments(workdir, title, theme, clips, seconds_per_question)
+
+    done = 0
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = [pool.submit(_run_capture, spec_path) for spec_path, _out in segments]
+        try:
+            for future in as_completed(futures):
+                future.result()
+                done += 1
+                if on_progress:
+                    on_progress(done, len(segments))
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
+
+    listing = workdir / 'segments.txt'
+    listing.write_text(''.join("file '%s'\n" % Path(out).name for _spec, out in segments), encoding='utf-8')
+    # Move the index (moov atom) to the front so browsers can show duration and seek.
+    proc = subprocess.run([_ffmpeg(), '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0',
+                           '-i', listing.name, '-c', 'copy', '-movflags', '+faststart', 'final.mp4'],
+                          cwd=str(workdir), capture_output=True, timeout=SEGMENT_TIMEOUT)
+    if proc.returncode != 0:
+        raise RenderError('ffmpeg failed: %s' % proc.stderr[-800:].decode('utf-8', 'replace'))
     return (workdir / 'final.mp4').read_bytes()
+
+
+def render_thumbnail(workdir, title, theme, question_count):
+    """Return a 1280x720 PNG for the YouTube thumbnail."""
+    workdir = Path(workdir)
+    _prepare_workdir(workdir)
+    slide = _write_slide(workdir, 'thumbnail', 'thumbnail.html',
+                         {'title': title or 'Listening Section', 'theme': theme,
+                          'question_count': question_count})
+    out = workdir / 'thumbnail.png'
+    spec_path = workdir / 'thumbnail.json'
+    spec_path.write_text(json.dumps({
+        'html': str(slide), 'out': str(out), 'mode': 'png', 'seek': 5.0,
+        'width': THUMBNAIL_SIZE[0], 'height': THUMBNAIL_SIZE[1], 'ffmpeg': _ffmpeg(),
+    }), encoding='utf-8')
+    _run_capture(spec_path)
+    return out.read_bytes()

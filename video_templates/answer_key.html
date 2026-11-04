@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+    h1 { font-size: 84px; font-weight: 800; color: var(--accent); animation: slideIn 0.8s cubic-bezier(.2,.8,.2,1) 0.1s; }
+    .sub { font-size: 36px; color: var(--muted); margin-top: 6px; animation: fadeUp 0.7s 0.4s; }
+    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 26px; margin-top: 56px; }
+    .cell { display: flex; align-items: center; justify-content: space-between; padding: 22px 34px; border-radius: 22px; background: var(--card); border: 2px solid var(--card-border); font-size: 48px; font-weight: 600; }
+    .cell b { color: var(--accent); font-size: 60px; font-weight: 800; }
+    {% for item in answers %}
+    .cell:nth-child({{ loop.index }}) { animation: pop 0.5s cubic-bezier(.3,1.6,.5,1) {{ (0.7 + loop.index0 * 0.08) | round(2) }}s; }
+    {% endfor %}
+</style>
+</head>
+<body>
+<div class="slide"><div class="content">
+    <h1>Answer Key</h1>
+    <div class="sub">How many did you get right?</div>
+    <div class="grid">
+        {% for item in answers %}
+        <div class="cell"><span>{{ item.number }}.</span><b>{{ item.letter }}</b></div>
+        {% endfor %}
+    </div>
+</div></div>
+<script src="base.js"></script>
+</body>
+</html>

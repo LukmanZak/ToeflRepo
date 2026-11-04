@@ -1,0 +1,80 @@
+/* Shared look for every slide. Edit colors and fonts here.
+   All motion is plain CSS animation: the renderer (services/capture.py) never waits in real
+   time, it calls window.seek(t) from base.js and takes a screenshot for each frame. */
+
+@font-face { font-family: "Poppins"; font-weight: 400; src: url("fonts/poppins-400.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-weight: 600; src: url("fonts/poppins-600.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-weight: 800; src: url("fonts/poppins-800.woff2") format("woff2"); }
+
+:root {
+    --bg-1: #12304d;
+    --bg-2: #0a1b2e;
+    --fg: #ffffff;
+    --muted: #b7cde3;
+    --accent: #ffc107;
+    --good: #2ecc71;
+    --bad: #ff5252;
+    --card: rgba(255, 255, 255, 0.08);
+    --card-border: rgba(255, 255, 255, 0.16);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; animation-fill-mode: both !important; }
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: "Poppins", "DejaVu Sans", sans-serif;
+    color: var(--fg);
+    background: var(--bg-2);
+}
+
+/* Slide canvas with two slowly drifting glows */
+.slide {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+}
+.slide::before, .slide::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.35;
+    animation: drift 16s ease-in-out infinite alternate;
+}
+.slide::before { width: 720px; height: 720px; left: -200px; top: -240px; background: #1e6bd6; }
+.slide::after  { width: 640px; height: 640px; right: -180px; bottom: -260px; background: #ffb300; animation-delay: -8s; }
+
+.content { position: relative; z-index: 1; width: 100%; height: 100%; padding: 70px 100px; }
+
+/* Small helpers */
+.accent { color: var(--accent); }
+.muted { color: var(--muted); }
+.pill {
+    display: inline-block;
+    padding: 10px 28px;
+    border-radius: 999px;
+    background: var(--card);
+    border: 2px solid var(--card-border);
+    font-weight: 600;
+    font-size: 30px;
+    letter-spacing: 1px;
+}
+.topbar { display: flex; justify-content: space-between; align-items: center; font-size: 34px; font-weight: 600; }
+.progress { height: 10px; border-radius: 6px; background: var(--card); margin-top: 22px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 6px; }
+
+/* Entrance animations. Use style="animation-delay: 0.4s" on an element to stagger it. */
+.fade-up   { animation: fadeUp 0.7s cubic-bezier(.2,.8,.2,1); }
+.slide-in  { animation: slideIn 0.8s cubic-bezier(.2,.8,.2,1); }
+.pop       { animation: pop 0.6s cubic-bezier(.3,1.6,.5,1); }
+.zoom-in   { animation: zoomIn 1s cubic-bezier(.2,.8,.2,1); }
+
+@keyframes fadeUp  { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-120px); } to { opacity: 1; transform: none; } }
+@keyframes pop     { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }
+@keyframes zoomIn  { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+@keyframes drift   { from { transform: translate(0, 0); } to { transform: translate(120px, 70px); } }

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+    .content { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+    .icon { width: 190px; height: 190px; margin-bottom: 30px; animation: pop 0.9s cubic-bezier(.3,1.6,.5,1) 0.1s; }
+    .tag { animation: fadeUp 0.7s 0.5s; }
+    h1 { font-size: 104px; font-weight: 800; line-height: 1.1; margin: 34px 0 26px; max-width: 1600px; animation: zoomIn 1s cubic-bezier(.2,.8,.2,1) 0.8s; }
+    .theme { font-size: 46px; color: var(--muted); animation: fadeUp 0.8s 1.5s; }
+    .theme b { color: var(--accent); font-weight: 600; }
+    .chips { display: flex; gap: 28px; margin-top: 56px; }
+    .chips .pill { font-size: 34px; }
+    .chips .pill:nth-child(1) { animation: pop 0.6s cubic-bezier(.3,1.6,.5,1) 2.0s; }
+    .chips .pill:nth-child(2) { animation: pop 0.6s cubic-bezier(.3,1.6,.5,1) 2.25s; }
+    .chips .pill:nth-child(3) { animation: pop 0.6s cubic-bezier(.3,1.6,.5,1) 2.5s; }
+</style>
+</head>
+<body>
+<div class="slide"><div class="content">
+    <!-- Headphones icon -->
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#ffc107" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 14v-2a9 9 0 0 1 18 0v2"/>
+        <rect x="3" y="14" width="4" height="6" rx="1.5" fill="#ffc107"/>
+        <rect x="17" y="14" width="4" height="6" rx="1.5" fill="#ffc107"/>
+    </svg>
+    <!-- Edit the words below freely. Values in double curly braces are filled in by the renderer. -->
+    <div class="pill tag accent">TOEFL-STYLE LISTENING PRACTICE</div>
+    <h1>{{ title }}</h1>
+    {% if theme %}<div class="theme">Theme: <b>{{ theme }}</b></div>{% endif %}
+    <div class="chips">
+        <div class="pill">{{ question_count }} question{{ '' if question_count == 1 else 's' }}</div>
+        <div class="pill">{{ clip_count }} recording{{ '' if clip_count == 1 else 's' }}</div>
+        <div class="pill">Answers explained</div>
+    </div>
+</div></div>
+<script src="base.js"></script>
+</body>
+</html>

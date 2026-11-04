@@ -10,6 +10,9 @@
         'views/listening_views.xml',
         'data/cron.xml',
     ],
+    'assets': {
+        'web.assets_backend': ['english_section/static/src/progress_service.js'],
+    },
     'application': True,
     'installable': True,
 }

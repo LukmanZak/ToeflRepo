@@ -7,6 +7,7 @@ class EnglishListeningQuestion(models.Model):
     _order = 'sequence, id'
 
     test_id = fields.Many2one('english.listening.test', required=True, ondelete='cascade')
+    clip_id = fields.Many2one('english.listening.clip', ondelete='cascade')
     sequence = fields.Integer(default=10)
     question = fields.Text(required=True)
     option_a = fields.Char(required=True)
@@ -15,3 +16,4 @@ class EnglishListeningQuestion(models.Model):
     option_d = fields.Char(required=True)
     correct_answer = fields.Selection(
         [('A', 'A'), ('B', 'B'), ('C', 'C'), ('D', 'D')], required=True)
+    explanation = fields.Text(help='Shown in the video after the answer is revealed.')

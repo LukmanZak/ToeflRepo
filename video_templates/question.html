@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+    .layout { display: flex; gap: 70px; margin-top: 46px; }
+    .main { flex: 1; min-width: 0; }
+    .question { font-size: 52px; font-weight: 600; line-height: 1.3; animation: fadeUp 0.7s 0.15s; }
+    .options { margin-top: 38px; display: flex; flex-direction: column; gap: 18px; }
+    .option { display: flex; align-items: center; gap: 26px; padding: 16px 28px; border-radius: 22px; background: var(--card); border: 2px solid var(--card-border); font-size: 36px; line-height: 1.25; }
+    .option .letter { flex: none; width: 62px; height: 62px; border-radius: 50%; background: var(--accent); color: #12304d; font-weight: 800; font-size: 34px; display: flex; align-items: center; justify-content: center; }
+    .option:nth-child(1) { animation: slideIn 0.6s cubic-bezier(.2,.8,.2,1) 0.7s; }
+    .option:nth-child(2) { animation: slideIn 0.6s cubic-bezier(.2,.8,.2,1) 1.0s; }
+    .option:nth-child(3) { animation: slideIn 0.6s cubic-bezier(.2,.8,.2,1) 1.3s; }
+    .option:nth-child(4) { animation: slideIn 0.6s cubic-bezier(.2,.8,.2,1) 1.6s; }
+
+    /* Countdown ring. It starts after the lead-in ({{ lead }} s) so viewers get the full time with everything visible. */
+    .timer { flex: none; width: 380px; display: flex; flex-direction: column; align-items: center; padding-top: 20px; animation: pop 0.7s cubic-bezier(.3,1.6,.5,1) 0.6s; }
+    .ring { position: relative; width: 340px; height: 340px; }
+    .ring svg { width: 340px; height: 340px; transform: rotate(-90deg); }
+    .ring circle { fill: none; stroke-width: 20; }
+    .ring .track { stroke: var(--card-border); }
+    .ring .fg { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 879.65; animation: drain {{ seconds }}s linear {{ lead }}s; }
+    .ring.urgent .fg { stroke: var(--bad); }
+    .ring .num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 150px; font-weight: 800; }
+    .ring.urgent .num { color: var(--bad); }
+    .timer .caption { margin-top: 18px; font-size: 30px; color: var(--muted); }
+    @keyframes drain { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 879.65; } }
+</style>
+</head>
+<body data-seconds="{{ seconds }}" data-lead="{{ lead }}">
+<div class="slide"><div class="content">
+    <div class="topbar">
+        <span class="accent">Question {{ number }} of {{ total }}</span>
+        <span class="muted">Recording {{ clip_number }} of {{ clip_total }}</span>
+    </div>
+    <div class="progress"><div style="width: {{ (number * 100 / total) | round(1) }}%"></div></div>
+
+    <div class="layout">
+        <div class="main">
+            <div class="question">{{ question }}</div>
+            <div class="options">
+                {% for letter in ['A', 'B', 'C', 'D'] %}
+                <div class="option"><span class="letter">{{ letter }}</span><span>{{ options[letter] }}</span></div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="timer">
+            <div class="ring" id="ring">
+                <svg viewBox="0 0 340 340">
+                    <circle class="track" cx="170" cy="170" r="140"/>
+                    <circle class="fg" cx="170" cy="170" r="140"/>
+                </svg>
+                <div class="num" id="num">{{ seconds }}</div>
+            </div>
+            <div class="caption">seconds to answer</div>
+        </div>
+    </div>
+</div></div>
+<script src="base.js"></script>
+<script>
+    // Counting is driven by the frame time, not by a timer, so every render is identical.
+    var seconds = parseFloat(document.body.dataset.seconds);
+    var lead = parseFloat(document.body.dataset.lead);
+    window.onSeek = function (t) {
+        var remaining = Math.max(0, Math.min(seconds, seconds - (t - lead)));
+        var ring = document.getElementById("ring");
+        var num = document.getElementById("num");
+        num.textContent = Math.ceil(remaining);
+        var urgent = remaining <= 5 && remaining > 0;
+        ring.classList.toggle("urgent", urgent);
+        // Last five seconds: the number "ticks" bigger at the start of every second.
+        num.style.transform = urgent ? "scale(" + (1 + 0.16 * (remaining - Math.floor(remaining))) + ")" : "none";
+    };
+</script>
+</body>
+</html>

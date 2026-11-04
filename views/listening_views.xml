@@ -6,6 +6,7 @@
             <list>
                 <field name="name"/>
                 <field name="topic"/>
+                <field name="question_count"/>
                 <field name="state" widget="badge"/>
                 <field name="generated_at"/>
             </list>
@@ -25,9 +26,17 @@
                 <sheet>
                     <div class="oe_title"><h1><field name="name" placeholder="Test name"/></h1></div>
                     <group>
-                        <field name="topic" placeholder="e.g. biology lecture on ecosystems"/>
+                        <field name="topic" placeholder="e.g. biology lecture on ecosystems"
+                               readonly="state in ('queued', 'generating')"/>
+                        <field name="question_count" readonly="state in ('queued', 'generating')"/>
+                        <field name="seconds_per_question" readonly="state in ('queued', 'generating')"/>
+                        <field name="theme"/>
+                        <field name="voices"/>
                         <field name="generated_at"/>
                     </group>
+                    <div invisible="state not in ('queued', 'generating')" class="mb-3">
+                        <field name="progress_html" widget="html" readonly="1" nolabel="1"/>
+                    </div>
                     <field name="error_message" invisible="not error_message" widget="text"/>
                     <notebook>
                         <page string="Video" name="video">
@@ -37,13 +46,39 @@
                             <field name="questions_ids">
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
+                                    <field name="clip_id"/>
                                     <field name="question"/>
                                     <field name="option_a"/>
                                     <field name="option_b"/>
                                     <field name="option_c"/>
                                     <field name="option_d"/>
                                     <field name="correct_answer"/>
+                                    <field name="explanation" optional="show"/>
                                 </list>
+                            </field>
+                        </page>
+                        <page string="Thumbnail" name="thumbnail">
+                            <field name="thumbnail_file" widget="image" readonly="1" nolabel="1"
+                                   options="{'size': [960, 540]}"/>
+                        </page>
+                        <page string="Clips" name="clips">
+                            <field name="clip_ids" readonly="1">
+                                <list>
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="title"/>
+                                </list>
+                                <form>
+                                    <group>
+                                        <field name="title"/>
+                                        <field name="script"/>
+                                    </group>
+                                    <field name="question_ids">
+                                        <list>
+                                            <field name="question"/>
+                                            <field name="correct_answer"/>
+                                        </list>
+                                    </field>
+                                </form>
                             </field>
                         </page>
                         <page string="Script" name="script">
