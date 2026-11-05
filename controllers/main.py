@@ -6,17 +6,17 @@ from werkzeug.exceptions import NotFound
 
 
 class EnglishSectionVideo(http.Controller):
-    @http.route('/english_section/video/<int:test_id>', type='http', auth='user', methods=['GET'])
-    def video(self, test_id):
-        test = request.env['english.listening.test'].browse(test_id).exists()
-        if not test or not test.video_file:
+    @http.route('/english_section/short/<int:short_id>', type='http', auth='user', methods=['GET'])
+    def video(self, short_id):
+        short = request.env['english.short'].browse(short_id).exists()
+        if not short or not short.video_file:
             raise NotFound()
-        test.check_access('read')
+        short.check_access('read')
         # Read the attachment directly. Odoo's Stream path returned 200 with Content-Length 0
         # for this file in the HTTP request, so the browser got an empty body.
         attachment = request.env['ir.attachment'].sudo().search([
-            ('res_model', '=', 'english.listening.test'),
-            ('res_id', '=', test.id),
+            ('res_model', '=', 'english.short'),
+            ('res_id', '=', short.id),
             ('res_field', '=', 'video_file'),
         ], limit=1)
         if not attachment:
@@ -26,7 +26,7 @@ class EnglishSectionVideo(http.Controller):
         headers = [
             ('Content-Type', 'video/mp4'),
             ('Accept-Ranges', 'bytes'),
-            ('Content-Disposition', 'inline; filename="listening_%d.mp4"' % test.id),
+            ('Content-Disposition', 'inline; filename="short_%d.mp4"' % short.id),
             ('Cache-Control', 'no-cache, private'),
             # Odoo's default "default-src 'none'" blocks the <video> element from its own page.
             ('Content-Security-Policy', "default-src 'self'; media-src 'self'"),

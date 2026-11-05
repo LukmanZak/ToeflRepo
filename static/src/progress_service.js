@@ -1,7 +1,7 @@
 import { registry } from "@web/core/registry";
 
-// Keeps the "Processing..." box on an English Listening Test form up to date while it generates.
-// When the test leaves the queued/generating state, the form is reloaded to show the result.
+// Keeps the "Processing..." box on an English Short form up to date while it generates.
+// When the short leaves the queued/generating state, the form is reloaded to show the result.
 export const englishProgressService = {
     dependencies: ["orm", "action"],
     start(env, { orm, action }) {
@@ -17,7 +17,7 @@ export const englishProgressService = {
                 if (!id) {
                     return;
                 }
-                const [rec] = await orm.read("english.listening.test", [id], [
+                const [rec] = await orm.read("english.short", [id], [
                     "state",
                     "progress",
                     "progress_message",

@@ -23,6 +23,7 @@ Spec keys:
                 ends (0 = hold the frame at play_until). Use it for endless motion whose period
                 divides loop_seconds, such as the equalizer bars.
     audio       wav path, or null for silence
+    audio_delay seconds of silence before the audio starts (default 0)
     ffmpeg      path of the ffmpeg binary
 """
 import json
@@ -65,7 +66,10 @@ def _ffmpeg_command(spec):
     cmd = [spec['ffmpeg'], '-y', '-loglevel', 'error',
            '-f', 'image2pipe', '-framerate', str(spec['fps']), '-c:v', 'mjpeg', '-i', '-']
     if spec.get('audio'):
-        cmd += ['-i', spec['audio'], '-af', 'apad']
+        # audio_delay: seconds of silence before the audio starts (the hook plays first).
+        delay_ms = int(round(float(spec.get('audio_delay') or 0) * 1000))
+        audio_filter = ('adelay=%d:all=1,apad' % delay_ms) if delay_ms > 0 else 'apad'
+        cmd += ['-i', spec['audio'], '-af', audio_filter]
     else:
         cmd += ['-f', 'lavfi', '-i', 'anullsrc=r=%d:cl=mono' % AUDIO_RATE]
     cmd += ['-map', '0:v', '-map', '1:a', '-t', '%.3f' % spec['duration'],

@@ -1,13 +1,13 @@
 {
     'name': 'English Section',
     'version': '20.0.1.0.0',
-    'summary': 'TOEFL-style listening tests: Gemini script, Gemini TTS audio, rendered MP4 with questions',
+    'summary': 'YouTube Shorts listening practice (TOEFL and school level): Gemini script and voices, rendered 9:16 MP4',
     'author': 'English Section',
     'license': 'LGPL-3',
     'depends': ['web'],
     'data': [
         'security/ir.access.csv',
-        'views/listening_views.xml',
+        'views/short_views.xml',
         'data/cron.xml',
     ],
     'assets': {

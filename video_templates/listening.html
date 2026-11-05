@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="base.css">
+<style>
+    /* ---------- Hook: big kinetic words in the middle. At 2.3 s it fades out and the topic takes over. ---------- */
+    .hook-layer { position: absolute; z-index: 3; left: 70px; right: 130px; top: 150px; bottom: 250px;
+                  display: flex; align-items: center; justify-content: center; text-align: center;
+                  animation: hookOut 0.5s ease-in {{ hook_end }}s; }
+    @keyframes hookOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-90px) scale(0.92); } }
+    .hook { font-size: 132px; font-weight: 800; line-height: 1.08; letter-spacing: -1px; }
+    .w { display: inline-block; margin: 0 14px; animation: wordPop 0.5s cubic-bezier(.3,1.7,.5,1); }
+    .w.hl { position: relative; color: var(--fg); z-index: 0; }
+    .w.hl::before { content: ""; position: absolute; z-index: -1; left: -10px; right: -10px; top: 14%; bottom: 4%; background: var(--accent);
+                    border-radius: 14px; transform-origin: left; animation: swipe 0.45s ease-out both; animation-delay: inherit; }
+    @keyframes wordPop { from { opacity: 0; transform: translateY(70px) scale(0.5) rotate(-6deg); } to { opacity: 1; transform: none; } }
+    @keyframes swipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    {% for w in hook_words %}
+    .w:nth-child({{ loop.index }}) { animation-delay: {{ (0.12 + loop.index0 * word_step) | round(2) }}s; }
+    {% endfor %}
+
+    /* Decorations around the hook; they leave before the hook does. */
+    .deco { position: absolute; z-index: 2; animation: decoIn 0.6s cubic-bezier(.3,1.6,.5,1) 0.2s, decoOut 0.3s ease-in {{ (hook_end - 0.3) | round(2) }}s, float 3s ease-in-out infinite alternate; }
+    @keyframes decoIn { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+    @keyframes decoOut { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes float { from { translate: 0 0; } to { translate: 0 -22px; } }
+    .deco.d1 { left: 70px; top: 330px; width: 120px; animation-delay: 0.3s, {{ (hook_end - 0.3) | round(2) }}s, 0s; }
+    .deco.d2 { right: 150px; top: 250px; width: 90px; animation-delay: 0.5s, {{ (hook_end - 0.3) | round(2) }}s, -1s; }
+    .deco.d3 { left: 120px; bottom: 380px; width: 100px; animation-delay: 0.7s, {{ (hook_end - 0.3) | round(2) }}s, -2s; }
+    .deco.d4 { right: 150px; bottom: 340px; width: 130px; animation-delay: 0.4s, {{ (hook_end - 0.3) | round(2) }}s, -0.5s; }
+
+    /* ---------- Topic ("materi"): replaces the hook once the audio starts ---------- */
+    .topic { position: absolute; z-index: 2; left: 70px; right: 130px; top: 160px; animation: fadeUp 0.7s cubic-bezier(.2,.8,.2,1) {{ (hook_end + 0.4) | round(2) }}s; }
+    .topic .kicker { display: inline-flex; align-items: center; gap: 14px; padding: 12px 28px; border-radius: 999px; background: var(--brand);
+                     color: #fff; font-size: 32px; font-weight: 600; letter-spacing: 2px; box-shadow: var(--shadow); }
+    .topic .kicker svg { width: 36px; height: 36px; }
+    .topic h1 { margin-top: 30px; font-size: 90px; font-weight: 800; line-height: 1.1; color: var(--fg); }
+
+    /* ---------- Stage: speaker icons + flowing sound wave ---------- */
+    .stage { position: absolute; z-index: 1; left: 70px; right: 130px; top: 600px; bottom: 250px; display: flex; flex-direction: column;
+             animation: stageIn 0.7s cubic-bezier(.2,.8,.2,1) {{ (hook_end + 0.2) | round(2) }}s; }
+    @keyframes stageIn { from { opacity: 0; transform: translateY(80px); } to { opacity: 1; transform: none; } }
+    .speakers { display: flex; justify-content: center; gap: 120px; height: 470px; align-items: center; }
+    .spk { position: relative; width: 230px; display: flex; flex-direction: column; align-items: center; gap: 22px; }
+    .spk .disc { position: relative; width: 210px; height: 210px; border-radius: 50%; background: var(--card); border: 5px solid var(--card-border);
+                 box-shadow: var(--shadow); display: flex; align-items: center; justify-content: center; }
+    .spk .disc svg.ico { width: 110px; height: 110px; stroke: var(--muted); }
+    .spk .rings { position: absolute; left: -50px; top: -60px; width: 330px; height: 330px; overflow: visible; }
+    .spk .name { padding: 8px 28px; border-radius: 999px; font-size: 32px; font-weight: 600; background: var(--bg-2); color: var(--muted); }
+    .spk.on .disc { background: var(--brand); border-color: var(--brand); }
+    .spk.on .disc svg.ico { stroke: #fff; }
+    .spk.on .name { background: var(--brand); color: #fff; }
+    .spk:not(.on) .disc { opacity: 0.75; }
+
+    .wave { flex: none; height: 380px; }
+    .wave svg { width: 100%; height: 380px; display: block; }
+    .row { margin-top: 24px; display: flex; align-items: center; gap: 24px; font-size: 32px; font-weight: 600; color: var(--muted); }
+    .audio-progress { flex: 1; height: 14px; border-radius: 7px; background: var(--card-border); overflow: hidden; }
+    .audio-progress > div { height: 100%; width: 0; border-radius: 7px; background: var(--brand); }
+</style>
+</head>
+<body data-delay="{{ delay }}" data-duration="{{ audio_seconds }}">
+<div class="slide">
+    <!-- Hook. hook_words comes from Gemini: a list of {t: word, hl: true for the highlighted word}. -->
+    <svg class="deco d1" viewBox="0 0 24 24" fill="none" stroke="#2f6df6" stroke-width="2.4" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>
+    <svg class="deco d2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ffb703"/></svg>
+    <svg class="deco d3" viewBox="0 0 40 24" fill="none" stroke="#1faa59" stroke-width="3" stroke-linecap="round"><path d="M3 12c4-8 8-8 12 0s8 8 12 0 6-4 10-2"/></svg>
+    <svg class="deco d4" viewBox="0 0 24 24" fill="none" stroke="#e5484d" stroke-width="2.4"><circle cx="12" cy="12" r="8"/></svg>
+    <div class="hook-layer"><div class="hook">{% for w in hook_words %}<span class="w{{ ' hl' if w.hl }}">{{ w.t }}</span> {% endfor %}</div></div>
+
+    <!-- Topic of the recording (clip_title from Gemini). It appears when the hook leaves. -->
+    <div class="topic">
+        <div class="kicker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14v-2a9 9 0 0 1 18 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5" fill="#fff"/><rect x="17" y="14" width="4" height="6" rx="1.5" fill="#fff"/></svg>
+            MATERI
+        </div>
+        <h1>{{ clip_title }}</h1>
+    </div>
+
+    <div class="stage">
+        <div class="speakers">
+            {% for sp in speakers %}
+            <div class="spk" data-role="{{ sp.role }}">
+                <svg class="rings" viewBox="0 0 330 330" fill="none" stroke="#2f6df6" stroke-width="6">
+                    <circle cx="165" cy="165" r="105"/><circle cx="165" cy="165" r="105"/><circle cx="165" cy="165" r="105"/>
+                </svg>
+                <div class="disc">
+                    {% if sp.role == 'Lecturer' %}
+                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.5 3 3 6 3s6-1.5 6-3v-4.5"/><path d="M22 9v6"/></svg>
+                    {% else %}
+                    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+                    {% endif %}
+                </div>
+                <div class="name">{{ sp.label or sp.role }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="wave"><svg id="wave" viewBox="0 0 880 300" preserveAspectRatio="none">
+            <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#9fc0ff"/><stop offset="1" stop-color="#2f6df6"/></linearGradient></defs>
+            <line x1="0" y1="150" x2="880" y2="150" stroke="#d6e2fb" stroke-width="3" stroke-dasharray="3 12" stroke-linecap="round"/>
+            <path id="wavepath" fill="url(#g)" d=""/>
+        </svg></div>
+        <div class="row"><div class="audio-progress"><div id="pbar"></div></div><span id="clock">0:00</span></div>
+    </div>
+</div>
+<script src="base.js"></script>
+<script>
+    // Everything here is driven by the frame time t, so each render is identical.
+    var levels = {{ levels | tojson }};        // loudness 0..1, one value per frame at {{ level_fps }} fps (audio time)
+    var timeline = {{ timeline | tojson }};    // [{speaker, start, end}] in audio time
+    var delay = parseFloat(document.body.dataset.delay);
+    var duration = parseFloat(document.body.dataset.duration);
+    var fps = {{ level_fps }};
+    var spks = Array.prototype.slice.call(document.querySelectorAll(".spk"));
+    var wavePath = document.getElementById("wavepath");
+    var pbar = document.getElementById("pbar");
+    var clock = document.getElementById("clock");
+
+    function levelAt(a) {
+        if (a < 0 || a > duration) { return 0; }
+        return levels[Math.min(levels.length - 1, Math.max(0, Math.floor(a * fps)))] || 0;
+    }
+
+    window.onSeek = function (t) {
+        var at = t - delay;                                      // time inside the audio
+        var level = levelAt(at);
+        var current = null;
+        timeline.forEach(function (turn) { if (at >= turn.start && at < turn.end) { current = turn.speaker; } });
+
+        spks.forEach(function (el) {
+            var on = el.dataset.role === current;
+            el.classList.toggle("on", on);
+            var disc = el.querySelector(".disc");
+            var rings = el.querySelectorAll(".rings circle");
+            if (on) {
+                disc.style.transform = "scale(" + (1 + level * 0.1).toFixed(3) + ")";
+                rings.forEach(function (c, i) {
+                    c.setAttribute("r", (108 + i * 17 + level * 22).toFixed(1));
+                    c.setAttribute("opacity", Math.max(0, level * (0.6 - i * 0.2)).toFixed(2));
+                });
+            } else {
+                disc.style.transform = "none";
+                rings.forEach(function (c) { c.setAttribute("opacity", "0"); });
+            }
+        });
+
+        // Sound wave: mirrored shape of the last ~2.4 s of loudness, flowing to the left.
+        var n = 64, step = 2.4 / n, top = [], bottom = [];
+        for (var k = 0; k <= n; k++) {
+            var x = k / n * 880;
+            var v = levelAt(at - (n - k) * step);
+            var taper = Math.sin(Math.PI * (0.12 + 0.88 * k / n));   // thin at the old (left) edge
+            var h = 5 + v * 138 * Math.max(0.25, taper);
+            top.push(x.toFixed(1) + " " + (150 - h).toFixed(1));
+            bottom.unshift(x.toFixed(1) + " " + (150 + h).toFixed(1));
+        }
+        wavePath.setAttribute("d", "M" + top.join(" L") + " L" + bottom.join(" L") + " Z");
+
+        var shown = Math.max(0, Math.min(duration, at));
+        pbar.style.width = (duration > 0 ? shown / duration * 100 : 0).toFixed(2) + "%";
+        var s = Math.floor(shown);
+        clock.textContent = Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2);
+    };
+</script>
+</body>
+</html>

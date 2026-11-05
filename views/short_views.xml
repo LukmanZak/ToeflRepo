@@ -1,21 +1,22 @@
 <odoo>
-    <record id="english_listening_test_list" model="ir.ui.view">
-        <field name="name">english.listening.test.list</field>
-        <field name="model">english.listening.test</field>
+    <record id="english_short_list" model="ir.ui.view">
+        <field name="name">english.short.list</field>
+        <field name="model">english.short</field>
         <field name="arch" type="xml">
             <list>
                 <field name="name"/>
+                <field name="mode"/>
                 <field name="topic"/>
-                <field name="question_count"/>
+                <field name="clip_title"/>
                 <field name="state" widget="badge"/>
                 <field name="generated_at"/>
             </list>
         </field>
     </record>
 
-    <record id="english_listening_test_form" model="ir.ui.view">
-        <field name="name">english.listening.test.form</field>
-        <field name="model">english.listening.test</field>
+    <record id="english_short_form" model="ir.ui.view">
+        <field name="name">english.short.form</field>
+        <field name="model">english.short</field>
         <field name="arch" type="xml">
             <form>
                 <header>
@@ -24,13 +25,14 @@
                     <field name="state" widget="statusbar" statusbar_visible="draft,done"/>
                 </header>
                 <sheet>
-                    <div class="oe_title"><h1><field name="name" placeholder="Test name"/></h1></div>
+                    <div class="oe_title"><h1><field name="name" placeholder="Short name"/></h1></div>
                     <group>
-                        <field name="topic" placeholder="e.g. biology lecture on ecosystems"
+                        <field name="mode" readonly="state in ('queued', 'generating')"/>
+                        <field name="topic" placeholder="e.g. how beavers change rivers"
                                readonly="state in ('queued', 'generating')"/>
-                        <field name="question_count" readonly="state in ('queued', 'generating')"/>
                         <field name="seconds_per_question" readonly="state in ('queued', 'generating')"/>
-                        <field name="theme"/>
+                        <field name="hook"/>
+                        <field name="clip_title"/>
                         <field name="voices"/>
                         <field name="generated_at"/>
                     </group>
@@ -43,42 +45,19 @@
                             <field name="video_html" widget="html" readonly="1" nolabel="1"/>
                         </page>
                         <page string="Questions" name="questions">
-                            <field name="questions_ids">
+                            <field name="question_ids">
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
-                                    <field name="clip_id"/>
                                     <field name="question"/>
                                     <field name="option_a"/>
                                     <field name="option_b"/>
                                     <field name="option_c"/>
                                     <field name="option_d"/>
                                     <field name="correct_answer"/>
-                                    <field name="explanation" optional="show"/>
+                                    <field name="explanation_id" optional="show"/>
+                                    <field name="explanation_en" optional="show"/>
+                                    <field name="explanation_voice" optional="show"/>
                                 </list>
-                            </field>
-                        </page>
-                        <page string="Thumbnail" name="thumbnail">
-                            <field name="thumbnail_file" widget="image" readonly="1" nolabel="1"
-                                   options="{'size': [960, 540]}"/>
-                        </page>
-                        <page string="Clips" name="clips">
-                            <field name="clip_ids" readonly="1">
-                                <list>
-                                    <field name="sequence" widget="handle"/>
-                                    <field name="title"/>
-                                </list>
-                                <form>
-                                    <group>
-                                        <field name="title"/>
-                                        <field name="script"/>
-                                    </group>
-                                    <field name="question_ids">
-                                        <list>
-                                            <field name="question"/>
-                                            <field name="correct_answer"/>
-                                        </list>
-                                    </field>
-                                </form>
                             </field>
                         </page>
                         <page string="Script" name="script">
@@ -90,13 +69,13 @@
         </field>
     </record>
 
-    <record id="action_english_listening_test" model="ir.actions.act_window">
-        <field name="name">Listening Tests</field>
-        <field name="res_model">english.listening.test</field>
+    <record id="action_english_short" model="ir.actions.act_window">
+        <field name="name">Shorts</field>
+        <field name="res_model">english.short</field>
         <field name="view_mode">list,form</field>
     </record>
 
     <menuitem id="menu_english_section_root" name="English Section" sequence="40" groups="base.group_user"/>
-    <menuitem id="menu_english_listening_tests" name="Listening Tests"
-              parent="menu_english_section_root" action="action_english_listening_test"/>
+    <menuitem id="menu_english_shorts" name="Shorts"
+              parent="menu_english_section_root" action="action_english_short"/>
 </odoo>

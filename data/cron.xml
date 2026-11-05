@@ -1,7 +1,7 @@
 <odoo><data noupdate="1">
-    <record id="ir_cron_process_listening" model="ir.cron">
-        <field name="name">English Section: process listening queue</field>
-        <field name="model_id" ref="model_english_listening_test"/>
+    <record id="ir_cron_process_shorts" model="ir.cron">
+        <field name="name">English Section: process shorts queue</field>
+        <field name="model_id" ref="model_english_short"/>
         <field name="state">code</field>
         <field name="code">model._cron_process_queue()</field>
         <field name="user_id" ref="base.user_root"/>

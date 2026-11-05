@@ -1,21 +1,28 @@
-/* Shared look for every slide. Edit colors and fonts here.
+/* Shared look for every Shorts slide (1080x1920). Edit colors and fonts here.
    All motion is plain CSS animation: the renderer (services/capture.py) never waits in real
-   time, it calls window.seek(t) from base.js and takes a screenshot for each frame. */
+   time, it calls window.seek(t) from base.js and takes a screenshot for each frame.
+
+   Safe zone: YouTube Shorts covers the bottom ~240 px (title, channel) and the right ~120 px
+   (like, comment, share buttons). Keep text and controls inside .content's padding. */
 
 @font-face { font-family: "Poppins"; font-weight: 400; src: url("fonts/poppins-400.woff2") format("woff2"); }
 @font-face { font-family: "Poppins"; font-weight: 600; src: url("fonts/poppins-600.woff2") format("woff2"); }
 @font-face { font-family: "Poppins"; font-weight: 800; src: url("fonts/poppins-800.woff2") format("woff2"); }
 
 :root {
-    --bg-1: #12304d;
-    --bg-2: #0a1b2e;
-    --fg: #ffffff;
-    --muted: #b7cde3;
-    --accent: #ffc107;
-    --good: #2ecc71;
-    --bad: #ff5252;
-    --card: rgba(255, 255, 255, 0.08);
-    --card-border: rgba(255, 255, 255, 0.16);
+    --bg-1: #f7faff;
+    --bg-2: #e3edff;
+    --fg: #14213d;
+    --muted: #5b6b8c;
+    --brand: #2f6df6;
+    --brand-soft: rgba(47, 109, 246, 0.12);
+    --accent: #ffb703;
+    --good: #1faa59;
+    --good-soft: rgba(31, 170, 89, 0.14);
+    --bad: #e5484d;
+    --card: #ffffff;
+    --card-border: #d6e2fb;
+    --shadow: 0 10px 30px rgba(32, 64, 140, 0.12);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; animation-fill-mode: both !important; }
@@ -29,43 +36,42 @@ html, body {
     background: var(--bg-2);
 }
 
-/* Slide canvas with two slowly drifting glows */
+/* Slide canvas with two soft drifting color blobs */
 .slide {
     position: relative;
     width: 100vw;
     height: 100vh;
     overflow: hidden;
-    background: linear-gradient(160deg, var(--bg-1), var(--bg-2));
+    background: linear-gradient(170deg, var(--bg-1), var(--bg-2));
 }
 .slide::before, .slide::after {
     content: "";
     position: absolute;
     border-radius: 50%;
-    filter: blur(90px);
-    opacity: 0.35;
+    filter: blur(110px);
+    opacity: 0.45;
     animation: drift 16s ease-in-out infinite alternate;
 }
-.slide::before { width: 720px; height: 720px; left: -200px; top: -240px; background: #1e6bd6; }
-.slide::after  { width: 640px; height: 640px; right: -180px; bottom: -260px; background: #ffb300; animation-delay: -8s; }
+.slide::before { width: 760px; height: 760px; left: -260px; top: -200px; background: #9fc0ff; }
+.slide::after  { width: 700px; height: 700px; right: -300px; bottom: -120px; background: #ffd98a; animation-delay: -8s; }
 
-.content { position: relative; z-index: 1; width: 100%; height: 100%; padding: 70px 100px; }
+.content { position: relative; z-index: 1; width: 100%; height: 100%; padding: 150px 130px 250px 70px; }
 
 /* Small helpers */
-.accent { color: var(--accent); }
+.brand { color: var(--brand); }
 .muted { color: var(--muted); }
 .pill {
     display: inline-block;
-    padding: 10px 28px;
+    padding: 12px 30px;
     border-radius: 999px;
-    background: var(--card);
-    border: 2px solid var(--card-border);
+    background: var(--brand);
+    color: #fff;
     font-weight: 600;
-    font-size: 30px;
-    letter-spacing: 1px;
+    font-size: 32px;
+    letter-spacing: 1.5px;
+    box-shadow: var(--shadow);
 }
-.topbar { display: flex; justify-content: space-between; align-items: center; font-size: 34px; font-weight: 600; }
-.progress { height: 10px; border-radius: 6px; background: var(--card); margin-top: 22px; overflow: hidden; }
-.progress > div { height: 100%; background: var(--accent); border-radius: 6px; }
+.pill.soft { background: var(--card); color: var(--brand); border: 2px solid var(--card-border); }
 
 /* Entrance animations. Use style="animation-delay: 0.4s" on an element to stagger it. */
 .fade-up   { animation: fadeUp 0.7s cubic-bezier(.2,.8,.2,1); }

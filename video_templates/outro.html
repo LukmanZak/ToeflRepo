@@ -4,22 +4,20 @@
 <meta charset="utf-8">
 <link rel="stylesheet" href="base.css">
 <style>
-    .content { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-    h1 { font-size: 98px; font-weight: 800; animation: zoomIn 0.9s cubic-bezier(.2,.8,.2,1) 0.1s; }
-    .line { font-size: 46px; color: var(--muted); margin-top: 24px; animation: fadeUp 0.8s 0.8s; }
-    .cta { margin-top: 64px; padding: 24px 70px; border-radius: 20px; background: var(--bad); font-size: 52px; font-weight: 800; letter-spacing: 1px;
-           animation: pop 0.7s cubic-bezier(.3,1.6,.5,1) 1.4s, beat 0.5s ease-in-out 2.1s infinite alternate; }
-    .small { margin-top: 40px; font-size: 36px; color: var(--muted); animation: fadeUp 0.8s 1.9s; }
-    @keyframes beat { from { transform: scale(1); } to { transform: scale(1.07); } }
+    .content { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding-bottom: 300px; }
+    .icon { width: 190px; height: 190px; animation: pop 0.7s cubic-bezier(.3,1.6,.5,1) 0.05s; }
+    h1 { margin-top: 36px; font-size: 84px; font-weight: 800; line-height: 1.15; animation: zoomIn 0.8s cubic-bezier(.2,.8,.2,1) 0.2s; }
+    .line { margin-top: 26px; font-size: 42px; color: var(--muted); font-weight: 600; animation: fadeUp 0.7s 0.7s; }
 </style>
 </head>
 <body>
 <div class="slide"><div class="content">
     <!-- Edit the closing words here. -->
-    <h1>Great job! <span class="accent">Keep practicing.</span></h1>
-    <div class="line">Check your answers and replay any recording you missed.</div>
-    <div class="cta">LIKE &amp; SUBSCRIBE</div>
-    <div class="small">Tell us your score in the comments!</div>
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="#2f6df6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="10" cy="8" r="4" fill="#e3edff"/><path d="M2.5 21c0-4.2 3.4-7 7.5-7s7.5 2.8 7.5 7"/><path d="M19 8v6M16 11h6" stroke="#ffb703" stroke-width="2.2"/>
+    </svg>
+    <h1>Jangan lupa <span class="brand">follow!</span></h1>
+    <div class="line">Next kita latihan lagi.</div>
 </div></div>
 <script src="base.js"></script>
 </body>

@@ -1,4 +1,4 @@
-"""Gemini client for the English Section listening tests.
+"""Gemini client for the English Section Shorts.
 
 Text uses the REST API with urllib. Speech uses the Gemini Live API (WebSocket), which needs
 the `websockets` package (installed in the Dockerfile).
@@ -11,6 +11,10 @@ import io
 import json
 import os
 import random
+import re
+import shutil
+import subprocess
+import tempfile
 import time
 import wave
 import urllib.error
@@ -31,36 +35,76 @@ LIVE_INSTRUCTION = (
     'word for word, in a natural, clear lecture or conversation voice. Do not add, skip, '
     'translate or answer anything.')
 
-MIN_QUESTIONS = 3
-MAX_QUESTIONS = 15
-MAX_QUESTIONS_PER_CLIP = 3
+NARRATOR_INSTRUCTION = (
+    'You are the cheerful, upbeat host of a short English quiz video for Indonesian learners. Read the user '
+    'text aloud exactly, word for word, in the language it is written in (Indonesian or English). Sound bright, '
+    'smiling and positive with clear energy, never flat, tired or sleepy. Do not add, skip, translate or answer '
+    'anything.')
+# For the hook and the ending: the loudest, most expressive reading, like a top short-video creator.
+NARRATOR_HYPE_INSTRUCTION = (
+    'You are an extremely energetic, charismatic short-video host speaking to Indonesian viewers. Read the user '
+    'text aloud exactly, word for word, in the language it is written in. Be very expressive and enthusiastic: '
+    'a big, bright, smiling voice, a high and lively pitch with a lot of pitch variation, punchy emphasis on the '
+    'key words, fast confident pacing, an excited exclamation at each "!" and a playful challenge in each '
+    '"?". Never sound flat, calm or sleepy. Do not add, skip, translate or answer anything.')
+# The opening line of every Short. *Starred* words get the yellow highlight on screen.
+HOOKS = {
+    'toefl': 'Stop Scroll! Sejago apa *listening* english kamu?',
+    'school': 'Cuma *2%* orang yang bisa jawab soal ini!',
+}
+OUTRO_NARRATION = 'Jangan lupa follow akun ini ya! Next kita latihan lagi!'
+
 ROLES = ('Lecturer', 'Student')
-# Prebuilt Gemini voices by gender. One voice per role is picked at random on every Generate
-# and reused for all clips of that test.
+# Prebuilt Gemini voices by gender. One voice per role is picked at random on every Generate.
 VOICES = {
     'male': ['Puck', 'Charon', 'Fenrir', 'Orus', 'Algenib', 'Iapetus'],
     'female': ['Kore', 'Zephyr', 'Leda', 'Aoede', 'Callirrhoe', 'Autonoe'],
 }
 
-SCRIPT_PROMPT = """You are writing a listening test in the style of the TOEFL iBT Listening section.
-Theme hint: {TOPIC}
+# Voices with an upbeat character, used for the host. The roles of the recording never use the host's voice.
+NARRATOR_VOICES = ['Puck', 'Zephyr', 'Fenrir', 'Autonoe', 'Leda']
+HYPE_TEMPO = 1.08   # the hook and the ending are played a little faster, pitch unchanged
 
-Choose ONE overall theme (follow the hint if given). Then write {CLIPS} separate short recordings that all fit this theme.
-The recordings do not need to continue each other; each one is its own small story or lecture segment, seen from a different angle of the theme.
-Each recording:
-- has a short title,
-- is about 150 to 250 words of natural spoken English,
-- is either a monologue by a university professor (only the speaker "Lecturer") or a conversation between a professor and a student (speakers "Lecturer" and "Student"). {KINDS}
-- has multiple-choice questions in English (main idea, detail, inference, purpose, or function of a statement). The number of questions per recording is exactly: {PLAN}.
+# One Short = one recording. The mode decides the level, the length and the number of questions.
+MODES = {
+    'school': {'questions': 1, 'min_words': 35, 'max_words': 65},
+    'toefl': {'questions': 2, 'min_words': 70, 'max_words': 110},
+}
 
-Every question has exactly four options labeled A, B, C, D and exactly one correct answer, supported by its recording.
-Across all {N} questions, make the correct answers look random: roughly equal numbers of A, B, C and D, in an irregular order with no repeating pattern.
-Every question also has an "explanation": one or two short sentences (at most 40 words) saying why the correct option is right, based on what the speaker said. It is shown on screen after the answer is revealed.
+MODE_RULES = {
+    'school': (
+        'Level: simple English for school students aged 7 to 16 (CEFR A2 to B1). Use common words and short '
+        'sentences. Topics: school, family, friends, hobbies, animals, food, weather, daily routines.\n'
+        'The recording is either a short conversation between a teacher (speaker "Lecturer") and a student '
+        '(speaker "Student"), or a short monologue by the teacher (only "Lecturer").\n'
+        'The recording is 40 to 60 words of natural spoken English.\n'
+        'Write exactly 1 multiple-choice question about a clear detail or the main idea. The answer must be '
+        'stated plainly in the recording.'),
+    'toefl': (
+        'Level: the TOEFL iBT Listening section. The recording is either a short monologue by a university '
+        'professor (only "Lecturer") or a conversation between a professor and a student ("Lecturer" and '
+        '"Student"), on an academic topic.\n'
+        'The recording is 80 to 100 words of natural spoken English.\n'
+        'Write exactly 2 multiple-choice questions in English (main idea, detail, inference, purpose, or '
+        'function of a statement). The two questions must test different things.'),
+}
 
-Also decide the gender of each role so the voices fit the characters: "speakers" maps "Lecturer" and "Student" to "male" or "female". Use the same gender for a role in all recordings and refer to them consistently. Do not use names that clash with the chosen gender.
+SCRIPT_PROMPT = """You are writing one very short listening test for a YouTube Short.
+Topic hint: {TOPIC}
+
+{MODE_RULES}
+
+Every question has exactly four options labeled A, B, C, D and exactly one correct answer, supported by the recording. Make the correct answer position random, not always the same letter.
+Each question also has two explanations of why the correct option is right, based on what the speaker said: "explanation_en" in English and "explanation_id" in natural everyday Indonesian. Each is one sentence of at most 25 words.
+Each question also has "explanation_voice": what the host SAYS out loud right after revealing the answer. Indonesian, casual and quick, at most 14 words, one short sentence. It must NOT restate the reason given in the written explanations and must not reuse their wording. Give a different, useful angle instead: the key word or phrase to listen for, or the trap that makes the most tempting wrong option wrong. Example of the style (do not copy): "Kuncinya ada di kata 'absolutely', itu tanda favorit!"
+
+Also write:
+- "clip_title": the topic of the recording in English, at most 6 words (shown as the subject of the listening).
+- "theme": a short English label of the topic.
+- "speakers": the gender of each role so the voices fit the characters: maps "Lecturer" and "Student" to "male" or "female". If there is no student, still give both.
 
 Return only JSON in this shape, with no extra text:
-{"theme": "...", "speakers": {"Lecturer": "female", "Student": "male"}, "clips": [{"title": "...", "turns": [{"speaker": "Lecturer", "text": "..."}], "questions": [{"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "answer": "A", "explanation": "..."}]}]}
+{"clip_title": "...", "theme": "...", "speakers": {"Lecturer": "female", "Student": "male"}, "turns": [{"speaker": "Lecturer", "text": "..."}], "questions": [{"question": "...", "options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "answer": "A", "explanation_en": "...", "explanation_id": "...", "explanation_voice": "..."}]}
 """
 
 
@@ -116,101 +160,111 @@ def _candidate_parts(data):
     return candidate.get('content', {}).get('parts', [])
 
 
-def plan_clips(question_count):
-    """How many questions each recording gets: as even as possible, at most 3 per recording.
-
-    3 -> [3], 4 -> [2, 2], 7 -> [3, 2, 2], 15 -> [3, 3, 3, 3, 3].
-    """
-    if not MIN_QUESTIONS <= question_count <= MAX_QUESTIONS:
-        raise GeminiError('The number of questions must be between %d and %d.'
-                          % (MIN_QUESTIONS, MAX_QUESTIONS))
-    clips = -(-question_count // MAX_QUESTIONS_PER_CLIP)  # ceil
-    base, extra = divmod(question_count, clips)
-    return [base + 1] * extra + [base] * (clips - extra)
+def text_overlap(spoken, written):
+    """Share of the longer words of `spoken` that also appear in `written` (0..1). Used to keep the
+    host's explanation from repeating the written one."""
+    words = [w for w in re.findall(r'\w+', spoken.lower()) if len(w) > 3]
+    if not words:
+        return 0.0
+    written_words = set(re.findall(r'\w+', written.lower()))
+    return sum(1 for w in words if w in written_words) / float(len(words))
 
 
-def _validate_clip(index, clip, expected_questions):
-    if not isinstance(clip, dict):
-        raise GeminiError('Clip %d is not an object.' % index)
+def validate_short(data, mode):
+    """Check the JSON Gemini returned for one Short and return it cleaned. Raises GeminiError."""
+    if mode not in MODES:
+        raise GeminiError('Unknown mode: %r' % mode)
+    rules = MODES[mode]
+    if not isinstance(data, dict):
+        raise GeminiError('Script JSON is not an object.')
+
     turns = []
-    for turn in clip.get('turns') or []:
-        speaker = turn.get('speaker')
-        text = (turn.get('text') or '').strip()
+    for turn in data.get('turns') or []:
+        speaker = turn.get('speaker') if isinstance(turn, dict) else None
+        text = str((turn or {}).get('text') or '').strip() if isinstance(turn, dict) else ''
         if speaker not in ROLES or not text:
-            raise GeminiError('Clip %d has an invalid turn: speaker=%r' % (index, speaker))
+            raise GeminiError('Invalid turn: speaker=%r' % speaker)
         turns.append({'speaker': speaker, 'text': text})
     if not turns:
-        raise GeminiError('Clip %d has no turns.' % index)
+        raise GeminiError('The recording has no turns.')
+    words = sum(len(t['text'].split()) for t in turns)
+    if not rules['min_words'] <= words <= rules['max_words']:
+        raise GeminiError('The recording has %d words, expected %d to %d.'
+                          % (words, rules['min_words'], rules['max_words']))
 
-    questions = clip.get('questions') or []
-    if len(questions) != expected_questions:
-        raise GeminiError('Clip %d: expected %d questions, got %d.' % (index, expected_questions, len(questions)))
+    questions = data.get('questions') or []
+    if len(questions) != rules['questions']:
+        raise GeminiError('Expected %d question(s), got %d.' % (rules['questions'], len(questions)))
     clean = []
     for number, q in enumerate(questions, 1):
         options = q.get('options') or {}
         if not isinstance(options, dict) or set(options) != {'A', 'B', 'C', 'D'}:
-            raise GeminiError('Clip %d question %d must have options A-D.' % (index, number))
+            raise GeminiError('Question %d must have options A-D.' % number)
         opts = {k: str(options[k]).strip() for k in 'ABCD'}
         if not all(opts.values()):
-            raise GeminiError('Clip %d question %d has an empty option.' % (index, number))
+            raise GeminiError('Question %d has an empty option.' % number)
         answer = q.get('answer')
-        question = (q.get('question') or '').strip()
+        question = str(q.get('question') or '').strip()
         if answer not in ('A', 'B', 'C', 'D') or not question:
-            raise GeminiError('Clip %d question %d has no valid answer or text.' % (index, number))
-        explanation = str(q.get('explanation') or '').strip()
-        if not explanation:
-            raise GeminiError('Clip %d question %d has no explanation.' % (index, number))
-        clean.append({'question': question, 'options': opts, 'answer': answer, 'explanation': explanation})
-    return {'title': str(clip.get('title') or 'Part %d' % index).strip(), 'turns': turns, 'questions': clean}
+            raise GeminiError('Question %d has no valid answer or text.' % number)
+        explanation_en = str(q.get('explanation_en') or '').strip()
+        explanation_id = str(q.get('explanation_id') or '').strip()
+        if not explanation_en or not explanation_id:
+            raise GeminiError('Question %d needs explanation_en and explanation_id.' % number)
+        explanation_voice = str(q.get('explanation_voice') or '').strip()
+        if not explanation_voice or len(explanation_voice.split()) > 24:
+            raise GeminiError('Question %d needs a short explanation_voice (at most 24 words).' % number)
+        if text_overlap(explanation_voice, explanation_id) > 0.5:
+            raise GeminiError('Question %d: explanation_voice is too similar to explanation_id.' % number)
+        clean.append({'question': question, 'options': opts, 'answer': answer,
+                      'explanation_en': explanation_en, 'explanation_id': explanation_id,
+                      'explanation_voice': explanation_voice})
 
+    clip_title = str(data.get('clip_title') or '').strip()
+    if not clip_title:
+        raise GeminiError('The script has no clip_title.')
 
-def _validate_script(data, plan):
-    if not isinstance(data, dict):
-        raise GeminiError('Script JSON is not an object.')
-    clips = data.get('clips') or []
-    if len(clips) != len(plan):
-        raise GeminiError('Expected %d clips, got %d.' % (len(plan), len(clips)))
     genders = data.get('speakers') or {}
     speakers = {}
     for role in ROLES:
         gender = str(genders.get(role, '')).strip().lower()
         speakers[role] = gender if gender in VOICES else random.choice(list(VOICES))
     return {
-        'theme': str(data.get('theme') or '').strip(),
+        'hook': HOOKS[mode],
+        'clip_title': clip_title,
+        'theme': str(data.get('theme') or clip_title).strip(),
         'speakers': speakers,
-        'clips': [_validate_clip(i, clip, plan[i - 1]) for i, clip in enumerate(clips, 1)],
+        'turns': turns,
+        'questions': clean,
     }
 
 
-def assign_voices(speakers):
-    """Pick a random voice per role that matches its gender. The two roles never share a voice."""
+def assign_narrator_voice():
+    """The host's voice: one of the upbeat voices, chosen at random."""
+    return random.choice(NARRATOR_VOICES)
+
+
+def assign_voices(speakers, exclude=()):
+    """Pick a random voice per role that matches its gender. The two roles never share a voice and
+    never use a voice in `exclude` (the host's)."""
     voices = {}
     for role in ROLES:
-        pool = [v for v in VOICES[speakers[role]] if v not in voices.values()]
+        pool = [v for v in VOICES[speakers[role]] if v not in voices.values() and v not in exclude]
         voices[role] = random.choice(pool)
     return voices
 
 
-def _kinds_rule(clip_count):
-    if clip_count >= 3:
-        return 'Mix both kinds across the %d recordings, with at least two conversations.' % clip_count
-    if clip_count == 2:
-        return 'Make one a monologue and the other a conversation.'
-    return 'Make it a conversation.'
+def generate_short(topic='', mode='toefl'):
+    """Return {'hook' (fixed per mode, see HOOKS), 'clip_title', 'theme', 'speakers': {role: gender}, 'turns', 'questions'}, validated.
 
-
-def generate_script(topic='', question_count=9):
-    """Return {'theme', 'speakers': {role: gender}, 'clips': [{'title', 'turns', 'questions'}]}, validated.
-
-    Each question is {'question', 'options', 'answer', 'explanation'}.
+    Each question is {'question', 'options', 'answer', 'explanation_en', 'explanation_id', 'explanation_voice'}.
     """
-    plan = plan_clips(question_count)
+    if mode not in MODES:
+        raise GeminiError('Unknown mode: %r' % mode)
+    default_topic = 'any academic topic' if mode == 'toefl' else 'everyday school life'
     prompt = (SCRIPT_PROMPT
-              .replace('{TOPIC}', topic.strip() or 'any academic topic')
-              .replace('{CLIPS}', str(len(plan)))
-              .replace('{KINDS}', _kinds_rule(len(plan)))
-              .replace('{PLAN}', '; '.join('recording %d: %d' % (i, n) for i, n in enumerate(plan, 1)))
-              .replace('{N}', str(question_count)))
+              .replace('{TOPIC}', topic.strip() or default_topic)
+              .replace('{MODE_RULES}', MODE_RULES[mode]))
     body = {
         'contents': [{'parts': [{'text': prompt}]}],
         'generationConfig': {'responseMimeType': 'application/json', 'temperature': 0.8},
@@ -220,7 +274,7 @@ def generate_script(topic='', question_count=9):
         data = _post(TEXT_MODEL, body, timeout=240)
         text = ''.join(p.get('text', '') for p in _candidate_parts(data) if not p.get('thought'))
         try:
-            return _validate_script(json.loads(text), plan)
+            return validate_short(json.loads(text), mode)
         except (ValueError, GeminiError) as e:
             last_error = str(e)
     raise GeminiError('No valid script after 3 attempts: %s' % last_error)
@@ -236,7 +290,7 @@ def _pcm_to_wav(pcm):
     return buf.getvalue()
 
 
-async def _speak_async(text, voice, model):
+async def _speak_async(text, voice, model, instruction=LIVE_INSTRUCTION):
     """Read `text` with one prebuilt voice through the Live API. Returns raw PCM bytes."""
     try:
         import websockets
@@ -248,7 +302,7 @@ async def _speak_async(text, voice, model):
             'responseModalities': ['AUDIO'],
             'speechConfig': {'voiceConfig': {'prebuiltVoiceConfig': {'voiceName': voice}}},
         },
-        'systemInstruction': {'parts': [{'text': LIVE_INSTRUCTION}]},
+        'systemInstruction': {'parts': [{'text': instruction}]},
     }}
     turn = {'clientContent': {'turns': [{'role': 'user', 'parts': [{'text': text}]}], 'turnComplete': True}}
     pcm = bytearray()
@@ -270,14 +324,14 @@ async def _speak_async(text, voice, model):
     return bytes(pcm)
 
 
-def _speak(text, voice, attempts=2):
+def _speak(text, voice, attempts=2, instruction=LIVE_INSTRUCTION):
     """Read `text` aloud. Each model in LIVE_MODELS gets `attempts` tries before the next one."""
     errors = []
     words = len(text.split())
     for model in LIVE_MODELS:
         for attempt in range(1, attempts + 1):
             try:
-                pcm = asyncio.run(asyncio.wait_for(_speak_async(text, voice, model), timeout=240))
+                pcm = asyncio.run(asyncio.wait_for(_speak_async(text, voice, model, instruction), timeout=240))
             except Exception as e:  # network, websocket close, timeout
                 error = '%s: %s' % (type(e).__name__, e)
             else:
@@ -291,18 +345,53 @@ def _speak(text, voice, attempts=2):
     raise GeminiError('Gemini Live speech failed: %s' % ' | '.join(errors)[:600])
 
 
-def synthesize(turns, voices):
-    """Turn one clip into a WAV file (bytes). `voices` maps role -> prebuilt voice name.
+def join_turns(pieces):
+    """Join [(speaker, pcm)] into one WAV. Returns (wav_bytes, timeline).
 
-    The Live API has one voice per session, so each turn is read on its own and the pieces
-    are joined with a short pause.
+    The Live API has one voice per session, so each turn is read on its own and the pieces are
+    joined with a short pause. `timeline` is [{'speaker', 'start', 'end'}] in seconds of the audio;
+    the slide uses it to light up whoever is talking.
     """
     pcm = bytearray()
+    timeline = []
     previous = None
-    for turn in turns:
+    for speaker, piece in pieces:
         if previous is not None:
-            pause = 0.25 if previous == turn['speaker'] else 0.5
+            pause = 0.25 if previous == speaker else 0.5
             pcm += bytes(2 * int(PCM_RATE * pause))
-        pcm += _speak(turn['text'], voices[turn['speaker']])
-        previous = turn['speaker']
-    return _pcm_to_wav(bytes(pcm))
+        start = len(pcm) / (2.0 * PCM_RATE)
+        pcm += piece
+        timeline.append({'speaker': speaker, 'start': round(start, 3),
+                         'end': round(len(pcm) / (2.0 * PCM_RATE), 3)})
+        previous = speaker
+    return _pcm_to_wav(bytes(pcm)), timeline
+
+
+def synthesize(turns, voices):
+    """Turn one recording into (wav_bytes, timeline). `voices` maps role -> prebuilt voice name."""
+    return join_turns([(turn['speaker'], _speak(turn['text'], voices[turn['speaker']])) for turn in turns])
+
+
+def _speed_up(wav_bytes, tempo):
+    """Play the WAV `tempo` times faster with the pitch unchanged (ffmpeg). Falls back to the original
+    audio if ffmpeg is not available."""
+    ffmpeg = shutil.which('ffmpeg')
+    if not ffmpeg:
+        return wav_bytes
+    with tempfile.TemporaryDirectory(prefix='english_tempo_') as tmp:
+        src, dst = Path(tmp) / 'in.wav', Path(tmp) / 'out.wav'
+        src.write_bytes(wav_bytes)
+        proc = subprocess.run([ffmpeg, '-y', '-loglevel', 'error', '-i', str(src), '-af', 'atempo=%.3f' % tempo,
+                               '-ar', str(PCM_RATE), '-ac', '1', '-c:a', 'pcm_s16le', str(dst)],
+                              capture_output=True, timeout=60)
+        if proc.returncode != 0 or not dst.exists():
+            return wav_bytes
+        return dst.read_bytes()
+
+
+def narrate(text, voice, hype=False):
+    """The host reads `text` (Indonesian or English). `hype` = the extra expressive style used for the
+    hook and the ending (also played a little faster). Returns WAV bytes."""
+    if not hype:
+        return _pcm_to_wav(_speak(text, voice, instruction=NARRATOR_INSTRUCTION))
+    return _speed_up(_pcm_to_wav(_speak(text, voice, instruction=NARRATOR_HYPE_INSTRUCTION)), HYPE_TEMPO)

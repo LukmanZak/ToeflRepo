@@ -1,14 +1,30 @@
 # English Section (Odoo 20 addon)
 
-Addon Odoo untuk membuat video tes listening gaya TOEFL secara otomatis, untuk konten YouTube.
+Addon Odoo untuk membuat **YouTube Shorts** latihan listening (9:16, maksimal 90 detik) secara otomatis.
 
 Sekali klik **Generate** di Odoo, sistem akan:
 
-1. Membuat satu tema besar dan **rekaman pendek** (sekitar 150-250 kata, monolog atau dialog) dengan soal pilihan ganda A-D, memakai **Gemini** (`gemini-3.5-flash-lite`). Jumlah soal dipilih di form (**3 sampai 15**). Soal dibagi serata mungkin ke rekaman, maksimal 3 soal per rekaman (misalnya 3 soal = 1 rekaman, 7 soal = 3 rekaman berisi 3, 2, 2, 15 soal = 5 rekaman). Tiap soal punya kunci jawaban dan **pembahasan** singkat.
-2. Mengubah tiap rekaman menjadi audio dengan **Gemini Live** (`gemini-3.8-live`). Gender tiap peran (Lecturer, Student) ditentukan Gemini, lalu suara dipilih acak sesuai gender dan dipakai sama untuk semua rekaman dalam satu hasil Generate.
-3. Merender **video MP4 1920x1080, 30 fps** dari **template HTML beranimasi** (Chromium headless + ffmpeg): kartu intro, slide rekaman dengan audio, slide soal dengan **hitung mundur**, slide **pembahasan** tepat setelah tiap soal, kunci jawaban, dan outro.
-4. Membuat **thumbnail YouTube** (PNG 1280x720) dari template yang sama.
-5. Menyimpan tema, suara, rekaman (skrip + audio), soal beserta pembahasan, video, dan thumbnail di database. Video bisa diputar langsung di form Odoo.
+1. Menulis **satu rekaman pendek** beserta soal pilihan ganda A-D dengan **Gemini** (`gemini-3.5-flash-lite`). Ada dua mode:
+   - **School (SD-SMA)**: 1 soal, bahasa Inggris sederhana (CEFR A2-B1), rekaman 40-60 kata, guru dan murid.
+   - **TOEFL Listening**: 2 soal, gaya TOEFL (kuliah atau percakapan kampus), rekaman 80-100 kata.
+   Gemini juga menulis **hook** bahasa Indonesia untuk 2 detik pertama, **topik rekaman** (materi), dan pembahasan tiap soal dalam **Indonesia dan Inggris**.
+2. Mengubah rekaman menjadi audio dengan **Gemini Live** (`gemini-3.8-live`). Gender tiap peran (Lecturer/Teacher, Student) ditentukan Gemini, suaranya dipilih acak sesuai gender. Waktu bicara tiap peran dicatat (timeline).
+3. Merender **video MP4 1080x1920, 30 fps** dari template HTML beranimasi (Chromium headless + ffmpeg).
+4. Menyimpan hasilnya di database. Video bisa diputar langsung di form Odoo.
+
+## Isi video
+
+Tanpa judul atau intro terpisah:
+
+| Bagian | Isi |
+|---|---|
+| Hook (0-2,3 dtk) | Kalimat hook animasi, satu kata di-stabilo. Audio belum mulai. |
+| Listening | Hook berubah jadi **MATERI** (topik rekaman). Audio mulai di detik ke-2. Ikon pembicara menyala sesuai giliran bicara, cincin dan gelombang suara mengikuti **volume audio asli**. Teks rekaman tidak ditampilkan. |
+| Soal (per soal) | Soal, 4 opsi, hitung mundur (merah di 3 detik terakhir). |
+| Jawaban (per soal) | Opsi benar menyala hijau, kartu "KENAPA?" dengan baris Indonesia dan Inggris. |
+| Penutup (3 dtk) | Ajakan menulis skor di komentar. |
+
+Total kira-kira 45 detik (school) dan 80 detik (toefl). Sebelum render, `render.fit_budget` memendekkan hitung mundur bila total melewati 88 detik, dan menolak render bila tetap tidak muat.
 
 ## Struktur
 
@@ -16,20 +32,20 @@ Sekali klik **Generate** di Odoo, sistem akan:
 .
 ├── __manifest__.py
 ├── models/
-│   ├── listening_test.py       # english.listening.test: state, jumlah soal, countdown, skrip, audio, video, tombol Generate
-│   ├── listening_clip.py       # english.listening.clip: judul, skrip, audio per rekaman
-│   └── listening_question.py   # english.listening.question: soal, kunci, pembahasan, terhubung ke rekaman
+│   ├── short.py                # english.short: mode, state, Generate, cron antrean, render dan simpan
+│   └── short_question.py       # english.short.question: soal, kunci, pembahasan ID dan EN
 ├── services/
-│   ├── gemini.py               # klien Gemini (teks via REST, suara via Live WebSocket), pembagian soal, pemilihan suara
-│   ├── render.py               # menyusun slide dari template, menjalankan capture paralel, menggabung segmen
-│   └── capture.py              # subproses: 1 slide HTML -> 1 segmen MP4 (Chromium screenshot per frame -> ffmpeg)
+│   ├── gemini.py               # klien Gemini: skrip (generate_short), validasi, suara + timeline (synthesize)
+│   ├── render.py               # audio_levels, hook_words, anggaran durasi, menyusun segmen, menggabung
+│   └── capture.py              # subproses: 1 slide HTML -> 1 segmen MP4 (screenshot per frame -> ffmpeg)
 ├── video_templates/            # TEMPLATE VIDEO (edit di sini)
-│   ├── base.css, base.js       # warna, font, animasi umum, hook seek(t)
-│   ├── intro.html, clip.html, question.html, explanation.html
-│   ├── answer_key.html, outro.html, thumbnail.html
+│   ├── base.css, base.js       # tema terang, font, animasi umum, hook seek(t)
+│   ├── listening.html          # hook -> materi, ikon pembicara, gelombang suara
+│   ├── question.html, answer.html, outro.html
 │   └── fonts/                  # Poppins (lisensi OFL, lihat fonts/OFL.txt)
-├── controllers/main.py         # GET /english_section/video/<id> (login wajib, mendukung Range)
-├── views/listening_views.xml   # list, form, menu
+├── tests/test_short_helpers.py # tes unit murni (tanpa Odoo/Gemini)
+├── controllers/main.py         # GET /english_section/short/<id> (login wajib, mendukung Range)
+├── views/short_views.xml       # list, form, menu
 ├── data/cron.xml               # cron tiap 1 menit untuk memproses antrean Generate
 └── security/ir.access.csv
 ```
@@ -37,93 +53,65 @@ Sekali klik **Generate** di Odoo, sistem akan:
 ## Persyaratan
 
 - Odoo 20 dengan modul `web`.
-- Python dengan **Jinja2** dan **Pillow** (sudah ikut dengan Odoo) dan paket **websockets** (untuk Gemini Live).
-- **Playwright + Chromium** untuk merender template HTML. Di Docker ini dipasang di `Dockerfile` proyek induk (`playwright install --with-deps chromium`, `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`). `compose.yaml` perlu `shm_size: "1gb"` untuk service `odoo`, karena `/dev/shm` bawaan 64MB membuat Chromium crash. Paket apt `chromium` di Ubuntu 24.04 hanya stub snap dan tidak bisa dipakai.
-- **ffmpeg** di PATH. Cek dengan `ffmpeg -version`.
+- Python dengan **Jinja2** (ikut Odoo) dan paket **websockets** (untuk Gemini Live).
+- **Playwright + Chromium** untuk merender template HTML. Di Docker ini dipasang di `Dockerfile` proyek induk (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`). `compose.yaml` perlu `shm_size: "1gb"` untuk service `odoo`, karena `/dev/shm` bawaan 64MB membuat Chromium crash.
+- **ffmpeg** di PATH.
 - Akses internet ke `generativelanguage.googleapis.com`. Render sendiri tidak memakai internet: font dibundel lokal dan semua request non-file diblokir saat render.
 
 ## Instalasi
 
-1. Clone repo ini ke folder bernama `english_section` (nama folder harus persis ini) di salah satu `addons_path`:
-
-   ```
-   git clone https://github.com/LukmanZak/ToeflRepo.git english_section
-   ```
+1. Clone repo ini ke folder bernama `english_section` (nama folder harus persis ini) di salah satu `addons_path`.
 2. Pasang API key Gemini (lihat bagian berikut).
-3. Install modul lewat Apps, atau dari command line:
+3. Install modul lewat Apps, atau: `odoo-bin -c odoo.conf -d <db> -i english_section --stop-after-init` (ganti `-i` dengan `-u` untuk memperbarui).
+4. Buka menu **English Section → Shorts**.
 
-   ```
-   odoo-bin -c odoo.conf -d <nama_database> -i english_section --stop-after-init
-   ```
-
-   Untuk memperbarui modul yang sudah terpasang, ganti `-i` dengan `-u`.
-
-4. Buka menu **English Section → Listening Tests**.
+Memperbarui dari versi 16:9 lama: modul lama (`english.listening.*`) dihapus. Datanya tidak dimigrasi; buat cadangan database sebelum upgrade bila perlu.
 
 ## API key
 
-Key dibaca dengan urutan berikut:
+Urutan pembacaan:
 
 1. Variabel lingkungan `GEMINI_API_KEY`.
-2. File `.env.local` di folder modul ini yang berisi:
-
-   ```
-   GEMINI_API_KEY=isi_key_disini
-   ```
+2. File `.env.local` di folder modul ini: `GEMINI_API_KEY=isi_key_disini`.
 
 Key **tidak pernah** disimpan ke database atau ditampilkan di Odoo. `.env.local` sudah masuk `.gitignore`; jangan di-commit.
 
 ## Cara pakai
 
-1. Buat record baru di **Listening Tests**. Isi:
-   - **Name** dan **Topic** (opsional), misalnya `biology lecture on ecosystems`.
-   - **Question count**: jumlah soal di video, 3 sampai 15 (default 9).
-   - **Seconds per question**: lama hitung mundur tiap soal, 5 sampai 120 detik (default 25).
-2. Klik **Generate**. Status berubah ke *Queued*, lalu *Generating* dengan progress bar. Lama proses bergantung pada jumlah soal (rekaman dibacakan satu per satu, lalu video dirender).
-3. Setelah status *Done*, buka tab:
-   - **Video**: pemutar video MP4.
-   - **Questions**: soal, pilihan, kunci jawaban, dan pembahasan.
-   - **Thumbnail**: gambar thumbnail YouTube (klik kanan, simpan gambar).
-   - **Clips**: skrip tiap rekaman. Tab **Script** berisi seluruh skrip.
-4. Jika gagal, status menjadi *Error* dan pesannya tampil di form. Klik Generate lagi untuk mencoba ulang.
-
-Catatan tentang waktu: TOEFL asli tidak memiliki hitung mundur per soal (waktu dihitung per section). Karena itu detik per soal bisa diatur dan berfungsi sebagai pemandu tempo untuk penonton, bukan tiruan persis ujian.
-
-## Format video
-
-| Bagian | Durasi |
-|---|---|
-| Intro | 5 detik |
-| Slide rekaman + audio (per rekaman) | panjang audio + 1 detik |
-| Slide soal (per soal) | 2,2 detik animasi masuk + *Seconds per question* |
-| Pembahasan (per soal) | otomatis dari panjang teks, 8-20 detik |
-| Kunci jawaban | 20 detik |
-| Outro | 6 detik |
-
-Konstanta durasi ada di bagian atas `services/render.py`.
+1. Buat record baru di **Shorts**. Isi **Name**, **Mode** (School atau TOEFL), **Topic** (opsional, petunjuk untuk Gemini), dan **Seconds per question** (default 10, 5 sampai 20).
+2. Klik **Generate**. Status berubah ke *Queued*, lalu *Generating* dengan progress bar.
+3. Setelah *Done*: tab **Video** (pemutar), **Questions** (soal, kunci, pembahasan), **Script** (skrip rekaman). Hook dan topik tampil di bagian atas form.
+4. Jika gagal, status *Error* dan pesannya tampil di form. Klik Generate lagi untuk mencoba ulang.
 
 ## Mengedit template
 
-Semua tampilan dan kata-kata statis ada di `video_templates/*.html` dan `base.css`. Edit file HTML-nya langsung, lalu klik **Generate** lagi (template dibaca setiap render, tidak perlu restart).
+Semua tampilan dan kata statis ada di `video_templates/*.html` dan `base.css`. Edit langsung lalu Generate lagi (template dibaca setiap render).
 
-- Nilai dinamis (judul, soal, opsi, pembahasan, jumlah soal) ditulis dalam kurung kurawal ganda dan diisi oleh renderer. Kata-kata lain, seperti teks intro atau ajakan subscribe di `outro.html`, bebas diubah.
-- Semua gerak memakai **animasi CSS** (`@keyframes`, `animation-delay`). Jangan memakai `setTimeout`, `requestAnimationFrame`, atau transisi: renderer tidak menunggu waktu nyata, tetapi membekukan animasi pada waktu `t` lewat `window.seek(t)` (`base.js`) lalu mengambil screenshot.
-- Bagian yang bukan CSS murni, seperti angka countdown di `question.html`, dihitung di `window.onSeek(t)`.
-- Animasi yang berulang (equalizer di `clip.html`) harus punya periode yang membagi 2 detik, karena 2 detik pertama di-loop selama audio diputar.
+- Nilai dinamis ditulis dalam kurung kurawal ganda dan diisi renderer. Kata statis (misalnya "KENAPA?", "MATERI", teks penutup) bebas diubah.
+- Semua gerak memakai **animasi CSS**. Jangan memakai `setTimeout`, `requestAnimationFrame`, atau transisi: renderer membekukan animasi pada waktu `t` lewat `window.seek(t)` (`base.js`) lalu mengambil screenshot.
+- Bagian yang bukan CSS murni (hitung mundur, bar suara, ikon yang menyala) dihitung di `window.onSeek(t)`.
 - Jangan menambahkan `{{` atau `{%` di komentar HTML atau CSS, karena dibaca sebagai sintaks Jinja2.
+- Safe zone Shorts: biarkan ~250 px bawah dan ~110 px kanan bebas dari teks penting (tertutup tombol dan judul YouTube).
+
+## Tes
+
+Tes unit murni (tanpa Odoo, Gemini, atau Chromium), dari folder modul:
+
+```
+python -m unittest discover -s tests -v
+```
 
 ## Catatan teknis
 
-- **Generate dijalankan oleh service Odoo, bukan dari shell.** Attachment (video, thumbnail, dan audio) disimpan di filestore dari user yang menjalankan proses. Jika Odoo berjalan sebagai service Windows (LocalSystem), pastikan generate juga dijalankan dari service itu. Attachment yang dibuat lewat shell pengguna lain tidak akan terbaca oleh service.
-- Render memakai satu subproses `capture.py` per segmen (maksimal 3 berjalan bersamaan, `MAX_WORKERS` di `render.py`). Subproses dipakai agar crash atau lonjakan memori Chromium tidak menjatuhkan worker Odoo.
-- Endpoint video mengirim header `Content-Security-Policy: default-src 'self'; media-src 'self'`. Tanpa ini, browser memblokir pemutaran dari halaman Odoo.
-- Video dibuat dengan `-movflags +faststart` agar browser bisa membaca durasi tanpa mengunduh seluruh file.
+- **Generate dijalankan oleh service Odoo (cron), bukan dari shell.** Attachment (video, audio) disimpan di filestore dari user yang menjalankan proses.
+- Render memakai satu subproses `capture.py` per segmen (maksimal 3 bersamaan, `MAX_WORKERS` di `render.py`).
+- Endpoint video mengirim `Content-Security-Policy: default-src 'self'; media-src 'self'` dan mendukung Range, agar bisa diputar dan di-seek di halaman Odoo.
+- Audio dimulai `AUDIO_DELAY` (2 detik) setelah video mulai lewat filter `adelay` di `capture.py`.
 - Model Gemini dan nama voice ada di `services/gemini.py` (`TEXT_MODEL`, `LIVE_MODELS`, `VOICES`).
 
 ## Batasan
 
-- Satu tes memakan kuota API Gemini teks dan Live setiap kali Generate ditekan.
-- Generate memakan waktu beberapa menit. Cron memproses maksimal 3 tes per menit.
-- Format soal selalu pilihan ganda A–D. Tidak ada penilaian otomatis untuk jawaban siswa.
-- Video hanya landscape 16:9. Belum ada versi Shorts vertikal, bunyi tik countdown, musik latar, atau upload otomatis ke YouTube.
-- Belum ada fitur untuk halaman publik. Akses hanya untuk user Odoo yang login.
+- Setiap Generate memakai kuota Gemini teks dan Live.
+- Format soal selalu pilihan ganda A-D, tanpa penilaian otomatis.
+- Hanya vertikal 9:16 (Shorts). Belum ada bunyi tik countdown, musik latar, atau upload otomatis ke YouTube.
+- Belum ada halaman publik. Akses hanya untuk user Odoo yang login.
